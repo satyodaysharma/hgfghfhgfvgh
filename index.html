@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weatherly • Fast Weather App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+        }
+
+        .glass {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .glass {
+                background: rgba(15, 23, 42, 0.6);
+            }
+        }
+
+        /* Leaflet map height */
+        #map {
+            height: 260px;
+        }
+    </style>
+    <!-- Leaflet for the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+</head>
+
+<body class="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-slate-100">
+    <div class="max-w-5xl mx-auto px-4 py-6 md:py-10">
+
+        <header class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center shadow">
+                    <span class="text-xl">☁️</span>
+                </div>
+                <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Weatherly</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="unitToggle" class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm">°C</button>
+                <a class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm" href="#" id="installBtn"
+                    hidden>Install</a>
+                <a class="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-sm" href="https://open-meteo.com/"
+                    target="_blank" rel="noreferrer">Data: Open‑Meteo</a>
+            </div>
+        </header>
+
+        <section class="mb-6 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+            <div class="flex gap-2">
+                <input id="cityInput" type="text" placeholder="Search city (e.g., Lucknow, Gorakhpur)"
+                    class="flex-1 px-4 py-3 rounded-2xl bg-white/10 placeholder-slate-400 outline-none focus:ring-2 focus:ring-sky-400" />
+                <button id="searchBtn"
+                    class="px-4 py-3 rounded-2xl bg-sky-500 hover:bg-sky-600 font-semibold shadow">Search</button>
+            </div>
+            <button id="geoBtn" class="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20">📍 Use my location</button>
+        </section>
+
+
+        <section id="summary" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="glass rounded-2xl p-5 border border-white/10 shadow">
+                <div class="text-sm opacity-75">Location</div>
+                <div id="loc" class="text-xl font-semibold mt-1">—</div>
+                <div id="locSub" class="text-xs opacity-70">—</div>
+            </div>
+            <div class="glass rounded-2xl p-5 border border-white/10 shadow">
+                <div class="text-sm opacity-75">Current</div>
+                <div class="mt-2 flex items-end gap-2">
+                    <div id="tempNow" class="text-4xl font-bold">—</div>
+                    <div id="descNow" class="text-sm opacity-80">—</div>
+                </div>
+                <div id="minmax" class="text-xs opacity-70 mt-1">—</div>
+            </div>
+            <div class="glass rounded-2xl p-5 border border-white/10 shadow">
+                <div class="text-sm opacity-75">Wind & Humidity</div>
+                <div id="windNow" class="mt-2">—</div>
+                <div id="humidNow" class="opacity-80 text-sm">—</div>
+            </div>
+        </section>
+
+
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            <div class="glass rounded-2xl p-4 border border-white/10 shadow">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="font-semibold">Map</h2>
+                    <div id="coords" class="text-xs opacity-70">—</div>
+                </div>
+                <div id="map" class="rounded-xl overflow-hidden"></div>
+            </div>
+            <div class="glass rounded-2xl p-4 border border-white/10 shadow">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="font-semibold">Next 12 hours</h2>
+                    <div class="text-xs opacity-70" id="localTz">—</div>
+                </div>
+                <div id="hourly" class="grid grid-cols-6 md:grid-cols-12 gap-2"></div>
+            </div>
+        </section>
+
+
+        <section class="glass rounded-2xl p-4 border border-white/10 shadow mb-10">
+            <h2 class="font-semibold mb-3">5‑Day Forecast</h2>
+            <div id="daily" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+        </section>
+
+
+
+        <footer class="text-xs opacity-60 text-center">
+            <p class="copyright">&copy; 2025 Satyoday Sharma. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+
+        const $ = (sel) => document.querySelector(sel);
+        const unitBtn = $('#unitToggle');
+        let useCelsius = true;
+
+        const weatherCodeMap = {
+            0: 'Clear sky',
+            1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+            45: 'Fog', 48: 'Depositing rime fog',
+            51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+            56: 'Freezing drizzle', 57: 'Dense freezing drizzle',
+            61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+            66: 'Freezing rain', 67: 'Heavy freezing rain',
+            71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
+            77: 'Snow grains',
+            80: 'Rain showers', 81: 'Heavy rain showers', 82: 'Violent rain showers',
+            85: 'Snow showers', 86: 'Heavy snow showers',
+            95: 'Thunderstorm', 96: 'Thunderstorm + hail', 99: 'Thunderstorm + heavy hail'
+        };
+
+        function toC(v) { return v; }
+        function toF(v) { return (v * 9 / 5) + 32; }
+
+        function fmtTemp(v) {
+            if (v === undefined || v === null || Number.isNaN(v)) return '—';
+            return Math.round(useCelsius ? toC(v) : toF(v)) + '°' + (useCelsius ? 'C' : 'F');
+        }
+
+        function fmtKmH(ms) { return Math.round(ms * 3.6) + ' km/h'; }
+
+        function isoToTime(iso, tz) {
+            const d = new Date(iso);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
+        }
+
+        function dayLabel(iso, tz) {
+            const d = new Date(iso);
+            return d.toLocaleDateString([], { weekday: 'short', day: '2-digit', month: 'short', timeZone: tz });
+        }
+
+
+        let map, marker;
+        function initMap(lat = 26.8467, lon = 80.9462) {
+            map = L.map('map', { zoomControl: false }).setView([lat, lon], 10);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+            marker = L.marker([lat, lon]).addTo(map);
+        }
+
+        function updateMap(lat, lon) {
+            if (!map) return initMap(lat, lon);
+            map.setView([lat, lon], 10);
+            if (marker) { marker.setLatLng([lat, lon]); } else { marker = L.marker([lat, lon]).addTo(map); }
+        }
+
+
+        async function geocodeCity(name) {
+            const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Geocoding failed');
+            const data = await res.json();
+            if (!data.results || !data.results.length) throw new Error('City not found');
+            return data.results[0];
+        }
+
+        async function getWeather(lat, lon, tz = 'auto') {
+            const url = new URL('https://api.open-meteo.com/v1/forecast');
+            url.search = new URLSearchParams({
+                latitude: lat,
+                longitude: lon,
+                current: ['temperature_2m', 'apparent_temperature', 'weathercode', 'wind_speed_10m', 'relative_humidity_2m'].join(','),
+                hourly: ['temperature_2m', 'relative_humidity_2m', 'precipitation_probability', 'weathercode', 'wind_speed_10m'].join(','),
+                daily: ['temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset', 'precipitation_probability_max', 'weathercode'].join(','),
+                timezone: tz
+            }).toString();
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Weather fetch failed');
+            return res.json();
+        }
+
+
+        async function getWarnings(lat, lon) {
+            try {
+                const url = `https://api.open-meteo.com/v1/warnings?latitude=${lat}&longitude=${lon}&language=en`;
+                const res = await fetch(url);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch { return null; }
+        }
+
+
+        function renderHourly(hourly, tz) {
+            const now = new Date();
+            const items = [];
+            for (let i = 0; i < hourly.time.length && items.length < 12; i++) {
+                const t = new Date(hourly.time[i]);
+                if (t >= now) {
+                    const temp = hourly.temperature_2m[i];
+                    const code = hourly.weathercode[i];
+                    items.push({ time: t.toISOString(), temp, code });
+                }
+            }
+            $('#hourly').innerHTML = items.map(it => `
+        <div class="p-2 rounded-xl bg-white/10 text-center">
+          <div class="text-xs opacity-75">${isoToTime(it.time, tz)}</div>
+          <div class="text-lg font-semibold">${fmtTemp(it.temp)}</div>
+          <div class="text-[10px] opacity-70">${weatherCodeMap[it.code] || ''}</div>
+        </div>
+      `).join('');
+        }
+
+        function renderDaily(daily, tz) {
+            const days = daily.time.slice(0, 5).map((d, i) => ({
+                date: d,
+                tmax: daily.temperature_2m_max[i],
+                tmin: daily.temperature_2m_min[i],
+                p: daily.precipitation_probability_max?.[i],
+                code: daily.weathercode?.[i]
+            }));
+            $('#daily').innerHTML = days.map(day => `
+        <div class="p-3 rounded-xl bg-white/10 text-center">
+          <div class="text-sm font-medium">${dayLabel(day.date, tz)}</div>
+          <div class="text-2xl font-bold mt-1">${fmtTemp(day.tmax)}</div>
+          <div class="text-xs opacity-75">min ${fmtTemp(day.tmin)}</div>
+          <div class="text-xs opacity-75 mt-1">${day.p != null ? ('🌧️ ' + day.p + '%') : ''}</div>
+          <div class="text-[11px] opacity-70">${weatherCodeMap[day.code] || ''}</div>
+        </div>
+      `).join('');
+        }
+
+        function renderSummary(locObj, current, daily, tz) {
+            $('#loc').textContent = `${locObj.name || '—'}${locObj.admin1 ? ', ' + locObj.admin1 : ''}`;
+            $('#locSub').textContent = `${locObj.country || ''}`;
+
+            $('#tempNow').textContent = fmtTemp(current.temperature_2m);
+            $('#descNow').textContent = weatherCodeMap[current.weathercode] || '';
+            $('#minmax').textContent = `H ${fmtTemp(daily.temperature_2m_max[0])} • L ${fmtTemp(daily.temperature_2m_min[0])}`;
+            $('#windNow').textContent = `Wind ${fmtKmH(current.wind_speed_10m)}`;
+            $('#humidNow').textContent = `Humidity ${Math.round(current.relative_humidity_2m)}%`;
+            $('#coords').textContent = `${locObj.latitude?.toFixed(3)}, ${locObj.longitude?.toFixed(3)}`;
+            $('#localTz').textContent = tz;
+        }
+
+        function convertAllTemps(root = document) {
+
+            if (window.__lastData) {
+                const { locObj, current, daily, hourly, tz } = window.__lastData;
+                renderSummary(locObj, current, daily, tz);
+                renderDaily(daily, tz);
+                renderHourly(hourly, tz);
+            }
+        }
+
+        async function loadByCoords(lat, lon) {
+
+            const pseudoLoc = { name: 'Selected location', admin1: '', country: '', latitude: lat, longitude: lon };
+            updateMap(lat, lon);
+            const data = await getWeather(lat, lon, 'auto');
+            const tz = data.timezone || 'auto';
+            const current = data.current;
+            const daily = data.daily;
+            const hourly = data.hourly;
+            window.__lastData = { locObj: pseudoLoc, current, daily, hourly, tz };
+            renderSummary(pseudoLoc, current, daily, tz);
+            renderDaily(daily, tz);
+            renderHourly(hourly, tz);
+
+
+            const warn = await getWarnings(lat, lon);
+            if (warn?.warnings?.length) {
+                const box = document.createElement('div');
+                box.className = 'mt-4 p-3 rounded-xl bg-amber-500/20 border border-amber-500/40';
+                box.innerHTML = `<div class="font-semibold">Weather Alerts</div>
+          <ul class="list-disc pl-5 text-sm mt-1">${warn.warnings.map(w => `<li>${w.event || 'Alert'} — ${w.headline || ''}</li>`).join('')}</ul>`;
+                document.querySelector('footer').insertAdjacentElement('beforebegin', box);
+            }
+        }
+
+        async function loadByCity(name) {
+            const loc = await geocodeCity(name);
+            updateMap(loc.latitude, loc.longitude);
+            const data = await getWeather(loc.latitude, loc.longitude, 'auto');
+            const tz = data.timezone || 'auto';
+            const current = data.current;
+            const daily = data.daily;
+            const hourly = data.hourly;
+            const locObj = { name: loc.name, admin1: loc.admin1, country: loc.country, latitude: loc.latitude, longitude: loc.longitude };
+            window.__lastData = { locObj, current, daily, hourly, tz };
+            renderSummary(locObj, current, daily, tz);
+            renderDaily(daily, tz);
+            renderHourly(hourly, tz);
+
+
+            const warn = await getWarnings(loc.latitude, loc.longitude);
+            if (warn?.warnings?.length) {
+                const box = document.createElement('div');
+                box.className = 'mt-4 p-3 rounded-xl bg-amber-500/20 border border-amber-500/40';
+                box.innerHTML = `<div class="font-semibold">Weather Alerts</div>
+          <ul class="list-disc pl-5 text-sm mt-1">${warn.warnings.map(w => `<li>${w.event || 'Alert'} — ${w.headline || ''}</li>`).join('')}</ul>`;
+                document.querySelector('footer').insertAdjacentElement('beforebegin', box);
+            }
+        }
+
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            initMap();
+
+
+            try {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    await loadByCoords(pos.coords.latitude, pos.coords.longitude);
+                }, async () => {
+
+                    await loadByCity('Lucknow');
+                }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 });
+            } catch {
+                await loadByCity('Lucknow');
+            }
+
+            $('#searchBtn').addEventListener('click', async () => {
+                const q = $('#cityInput').value.trim();
+                if (!q) return;
+                toggleWorking(true);
+                try { await loadByCity(q); } finally { toggleWorking(false); }
+            });
+
+            $('#cityInput').addEventListener('keydown', async (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    $('#searchBtn').click();
+                }
+            });
+
+            $('#geoBtn').addEventListener('click', async () => {
+                toggleWorking(true);
+                try {
+                    navigator.geolocation.getCurrentPosition(async (pos) => {
+                        await loadByCoords(pos.coords.latitude, pos.coords.longitude);
+                        toggleWorking(false);
+                    }, async () => {
+                        await loadByCity('Gorakhpur');
+                        toggleWorking(false);
+                    }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 });
+                } catch {
+                    await loadByCity('Gorakhpur');
+                    toggleWorking(false);
+                }
+            });
+
+            unitBtn.addEventListener('click', () => {
+                useCelsius = !useCelsius;
+                unitBtn.textContent = useCelsius ? '°C' : '°F';
+                convertAllTemps();
+            });
+        });
+
+        function toggleWorking(isBusy) {
+            const btn = $('#searchBtn');
+            btn.disabled = isBusy;
+            btn.textContent = isBusy ? 'Loading…' : 'Search';
+            btn.classList.toggle('opacity-50', isBusy);
+        }
+    </script>
+</body>
+
+</html>
